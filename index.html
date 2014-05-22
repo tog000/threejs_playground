@@ -1,6 +1,6 @@
 <html>
 <head>
-	<title>My first Three.js app</title>
+	<title></title>
 	<style>
 		html,body{margin:0px;}
 		canvas { width: 100%; height: 100% }
@@ -20,26 +20,6 @@
 	<script src="js/EffectComposer.js"></script>
 
 	<script src="js/open_sans_semibold.typeface.js"></script>
-
-
-<script id="vertexShader" type="x-shader/x-vertex">
-varying vec3 vNormal;
-void main() 
-{
-    vNormal = normalize( normalMatrix * normal );
-    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-}
-</script>
-
-<!-- fragment shader a.k.a. pixel shader -->
-<script id="fragmentShader" type="x-shader/x-vertex"> 
-varying vec3 vNormal;
-void main() 
-{
-	float intensity = pow( 0.7 - dot( vNormal, vec3( 0.0, 0.0, 1.0 ) ), 4.0 ); 
-    gl_FragColor = vec4( 1.0, 1.0, 1.0, 1.0 ) * intensity;
-}
-</script>
 	<script>
 		var scene,camera,renderer,mouse;
 		var ground, cube, light, dae;
