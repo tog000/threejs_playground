@@ -141,7 +141,6 @@
 			composer.addPass( fxaaPass );
 			fxaaPass.renderToScreen = true;
 
-
 			document.addEventListener( 'mousemove', onDocumentMouseMove, false );
 			window.addEventListener( 'resize', onWindowResize, false );
 			
@@ -150,6 +149,7 @@
 
 		var bloomSign = 1;
 		var bloomCounter = 1;
+		var targetY,targetZ,deltaY,deltaZ
 		var render = function () {
 			requestAnimationFrame(render);
 
@@ -200,6 +200,7 @@
 
 		}
 
+		var windowHalfX,windowHalfY
 		function onWindowResize() {
 
 			windowHalfX = window.innerWidth / 2;
