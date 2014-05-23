@@ -1,0 +1,324 @@
+<html>
+<head>
+	<title></title>
+	<style>
+		html,body{margin:0px;}
+		canvas { width: 100%; height: 100% }
+	</style>
+</head>
+<body>
+	<script src="js/three.min.js"></script>
+	<script src="http://code.createjs.com/easeljs-0.7.1.min.js"></script>
+
+	<script src="js/ColorShiftShader.js"></script>
+	<script src="js/RenderPass.js"></script>
+	<script src="js/ConvolutionShader.js"></script>
+	<script src="js/CopyShader.js"></script>
+	<script src="js/FXAAShader.js"></script>
+	<script src="js/MaskPass.js"></script>
+	<script src="js/ShaderPass.js"></script>
+	<script src="js/BloomPass.js"></script>
+	<script src="js/EffectComposer.js"></script>
+
+	<script type="x-shader/x-vertex" id="vertexShader">
+		
+		#ifdef GL_ES
+		precision highp float;
+		#endif
+		uniform float delta;
+		uniform float alpha;
+		uniform float scale;		
+		varying vec2 vUv;
+
+		void main()
+		{
+			vec3 p = position;
+			vUv = uv;
+			//p.x += sin(delta);
+			//p.z = 100.0*sin(delta);
+			p.y += sin(delta+sin(p.x/100.0))*10.0;
+			float scale = 1.0;
+			vec4 mvPosition = modelViewMatrix * vec4(vec3(scale,scale,scale) * p, 1.0 );
+			gl_Position = projectionMatrix * mvPosition;
+		}
+		
+	</script>
+
+
+	<script type="x-shader/x-fragment" id="fragShader">
+	
+		#ifdef GL_ES
+		precision highp float;
+		#endif
+		uniform float delta;
+		uniform float alpha;
+		uniform float scale;
+		uniform vec3 color;
+		varying vec2 vUv;
+		
+		uniform sampler2D tDiffuse;
+
+		void main(void)
+		{
+			vec2 p = vUv;
+			
+			vec3 newColor = color;
+			//newColor[0] = sin(position.x/10.0);
+			newColor[0] = abs(sin(delta/10.0+sin(p.x/100.0)));
+			newColor[1] = abs(cos(delta/10.0+sin(p.x/100.0)));
+			vec4 finalColor = vec4(newColor, 1.0);//sin(position.x/20.0));
+			/**/
+			//finalColor[3] = 0.0;
+
+			//vec4 texel = texture2D( tDiffuse, vUv );
+			gl_FragColor = finalColor;
+		}
+	
+	</script>
+
+	<script src="js/open_sans_semibold.typeface.js"></script>
+	<script>
+		var scene,camera,renderer,mouse;
+		var ground, cube, spotlight1, dae;
+
+		var composer,fxaaPass, bloomPass;
+
+		var uniforms,uniforms2;
+
+		var colorShiftShader;
+
+		var particleSystem;
+		var mouseStarted = false;
+
+		function init(){
+			scene = new THREE.Scene();
+			scene.fog = new THREE.FogExp2( 0x000000, 0.0025 );
+			camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 1000);
+			renderer = new THREE.WebGLRenderer({ antialias: true });
+			mouse = {};
+			
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			renderer.setClearColor( scene.fog.color, 1 );
+			document.body.appendChild(renderer.domElement);
+
+
+			var groundMat = new THREE.MeshPhongMaterial({color:0x333333}); 
+			var groundGeo = new THREE.PlaneGeometry(2000,2000,10,10); 
+			ground = new THREE.Mesh(groundGeo,groundMat); 
+			ground.position.y = -120;
+			ground.rotation.x = -Math.PI/2;
+			scene.add(ground);
+
+			materials = []
+			geometry = new THREE.Geometry();
+
+			for ( i = 0; i < 10000; i ++ ) {
+
+				var vertex = new THREE.Vector3();
+				vertex.x = Math.random() * 2000 - 1000;
+				vertex.y = Math.random() * 2000 - 1000;
+				vertex.z = Math.random() * 2000 - 1000;
+
+				geometry.vertices.push( vertex );
+
+			}
+
+			color = [1,1,0.4];
+			size  = 7;
+
+			particleMaterial = new THREE.ParticleSystemMaterial( { size: size } );
+			particleMaterial.blending = THREE.AdditiveBlending;
+			particleMaterial.transparent = true;
+			particleMaterial.opacity = 0.5;
+			particleMaterial.map = THREE.ImageUtils.loadTexture("particle.png"),
+
+			particleSystem = new THREE.ParticleSystem( geometry, particleMaterial );
+			particleSystem.rotation.x = Math.random() * 6;
+			particleSystem.rotation.y = Math.random() * 6;
+			particleSystem.rotation.z = Math.random() * 6;
+
+			scene.add( particleSystem );
+
+			material = new THREE.MeshFaceMaterial( [ 
+				new THREE.MeshPhongMaterial( { color: 0x18FAF8, shading: THREE.FlatShading } ), // front
+				new THREE.MeshPhongMaterial( { color: 0x088A88, shading: THREE.FlatShading } ) // side
+			] );
+
+			textGeo = new THREE.TextGeometry( "tog000", {
+				size: 90,
+				height: 20,
+				curveSegments: 20,
+
+				font: 'open sans',
+				weight: 'normal',
+				style: 'normal',
+
+				material: 0,
+				extrudeMaterial: 1
+
+			});
+
+			textGeo.computeBoundingBox();
+			textGeo.computeVertexNormals();
+
+			textGeo.textWidth = textGeo.boundingBox.max.x - textGeo.boundingBox.min.x;
+
+
+			uniforms = {
+
+  delta: {type: 'f', value: 0.0},
+
+  scale: {type: 'f', value: 1.0},
+
+  alpha: {type: 'f', value: 1.0},
+  color: {type: "c", value: new THREE.Color( 0x18FAF8 ) },
+  tDiffuse: { type: "t", value: null },
+
+};
+
+			shaderMaterial = new THREE.ShaderMaterial({
+				uniforms: uniforms,
+  				attributes: {},
+  				//transparent: true,
+				vertexShader: document.getElementById("vertexShader").innerText,
+				fragmentShader: document.getElementById("fragShader").innerText
+			});
+
+			textMesh2 = new THREE.Mesh( textGeo, shaderMaterial );
+			textMesh2.rotation.y = Math.PI/2;
+			textMesh2.position.z = textGeo.textWidth/2;
+			textMesh2.position.x = 0;
+			scene.add(textMesh2);
+
+			// Spotlight 1
+			spotlight1 = new THREE.SpotLight(0x18FAF8);
+			spotlight1.position.set(400,200,0);
+			//spotlight1.shadowCameraVisible = true;
+			spotlight1.shadowDarkness = 1;
+			spotlight1.intensity = 6;
+			spotlight1.castShadow = false;
+			
+			spotlight1.target.position.x = 0;
+			spotlight1.target.position.y = 0;
+			spotlight1.target.position.z = 0;
+
+			scene.add(spotlight1);
+
+			renderer.shadowMapEnabled = true;
+			textMesh2.castShadow = true;
+			ground.receiveShadow = true;
+
+			renderer.autoClear = false;
+
+			var renderModel = new THREE.RenderPass( scene, camera );
+
+			bloomPass = new THREE.BloomPass( 1 );
+
+			fxaaPass = new THREE.ShaderPass( THREE.FXAAShader );
+			fxaaPass.uniforms[ 'resolution' ].value = new THREE.Vector2( 1/window.innerWidth, 1/window.innerHeight );
+			
+			composer = new THREE.EffectComposer( renderer );
+			composer.addPass( renderModel );
+			composer.addPass( fxaaPass );
+			composer.addPass( bloomPass );
+			colorShiftShader = new THREE.ShaderPass( THREE.ColorShiftShader );
+			//colorShiftShader.uniforms['delta'] = {delta: {type: 'f', value: 1.0}};
+			
+			//colorShiftShader.uniforms = uniforms2;
+			composer.addPass( colorShiftShader );
+			colorShiftShader.renderToScreen = true;
+
+			document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+			window.addEventListener( 'resize', onWindowResize, false );
+			
+			render();
+		}
+
+		var bloomSign = 1;
+		var bloomCounter = 1;
+		var targetY,targetZ,deltaY,deltaZ
+		var render = function () {
+			requestAnimationFrame(render);
+
+			uniforms.delta.value += 0.1;
+			colorShiftShader.uniforms['delta'].value += 0.1;
+
+			particleSystem.position.y += 2;
+			if(particleSystem.position.y > 1000){
+				particleSystem.position.y = -1000;
+			}
+			
+			bloomCounter += 0.001*bloomSign;
+			if(bloomCounter>=1.3 || bloomCounter<=1){
+				bloomSign *= -1;
+			}
+			bloomPass.copyUniforms[ 'opacity' ].value = bloomCounter;
+			if(mouseStarted){
+				targetY = Math.min(500,Math.max(-100,mouse.y*0.2));
+				targetZ = Math.min(400,Math.max(-400,mouse.x*0.2));
+
+				deltaY = (camera.position.y - targetY);
+				deltaZ = (camera.position.z - targetZ);
+
+				if(Math.abs(deltaY) > 10){
+					camera.position.y -=  deltaY / 100;
+				}
+
+				if(Math.abs(deltaZ) > 10){
+					camera.position.z -=  deltaZ / 100;
+				}
+
+				//camera.position.z += (camera.position.z - targetZ) / 100;
+				//camera.position.z
+
+			}else{
+				camera.position.y = 0;
+				camera.position.x = 480;
+				camera.position.z = 0;
+			}
+			camera.lookAt(scene.position);
+			renderer.clear();
+			composer.render();
+		};
+
+		function onDocumentMouseMove( event ) {
+
+			mouseStarted = true;
+
+			mouse.x = ( event.clientX - window.innerWidth / 2 ) * 8;
+			mouse.y = ( event.clientY - window.innerHeight / 2 ) * 8;
+
+		}
+
+		var windowHalfX,windowHalfY
+		function onWindowResize() {
+
+			windowHalfX = window.innerWidth / 2;
+			windowHalfY = window.innerHeight / 2;
+
+			fxaaPass.uniforms[ 'resolution' ].value = new THREE.Vector2( 1/window.innerWidth, 1/window.innerHeight );
+
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			renderer.setSize( window.innerWidth, window.innerHeight );
+
+		}
+
+
+		init();
+
+
+		</script>
+		<script>
+		 (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+						(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+						m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+				})(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+				ga('create', 'UA-50809426-1', 'tog000.io');
+				ga('send', 'pageview');
+
+		</script>
+	</body>
+	</html>
